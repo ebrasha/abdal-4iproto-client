@@ -1,0 +1,9 @@
+{
+  "ssh_host": "0.0.0.0",
+  "ssh_port": 2222,
+  "ssh_user": "ebra",
+  "ssh_password": "pass",
+  "socks5_port": 52905,
+  "auto_reconnect": "yes",
+  "auto_reconnect_timeout": 2000
+}

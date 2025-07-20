@@ -1,5 +1,0 @@
-G:\Abdal Project BackUp\Customer\Mr Moradi\Abdal 4i Proto\Abdal Proxy Bridge\Abdal Proxy Bridge\obj\Release\net6.0\Abdal Socks Bridge.csproj.AssemblyReference.cache
-G:\Abdal Project BackUp\Customer\Mr Moradi\Abdal 4i Proto\Abdal Proxy Bridge\Abdal Proxy Bridge\obj\Release\net6.0\Abdal Socks Bridge.GeneratedMSBuildEditorConfig.editorconfig
-G:\Abdal Project BackUp\Customer\Mr Moradi\Abdal 4i Proto\Abdal Proxy Bridge\Abdal Proxy Bridge\obj\Release\net6.0\Abdal Socks Bridge.AssemblyInfoInputs.cache
-G:\Abdal Project BackUp\Customer\Mr Moradi\Abdal 4i Proto\Abdal Proxy Bridge\Abdal Proxy Bridge\obj\Release\net6.0\Abdal Socks Bridge.AssemblyInfo.cs
-G:\Abdal Project BackUp\Customer\Mr Moradi\Abdal 4i Proto\Abdal Proxy Bridge\Abdal Proxy Bridge\obj\Release\net6.0\Abdal Socks Bridge.csproj.CoreCompileInputs.cache

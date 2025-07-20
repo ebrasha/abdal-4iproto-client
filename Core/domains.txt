@@ -1,0 +1,3 @@
+*.digikala.com
+www.digikala.com
+*.ir
