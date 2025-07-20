@@ -69,6 +69,16 @@ After installing and running the application
 
 ---
 
+
+## 📡 Abdal 4iProto Server
+
+This client is designed to work with the official Abdal 4iProto Server.  
+To set up your own secure SSH-based tunneling server, visit:  
+👉 [Abdal 4iProto Server on GitHub](https://github.com/ebrasha/abdal-4iproto-server)
+
+
+---
+
  
 
 
