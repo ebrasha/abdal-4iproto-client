@@ -1,85 +1,88 @@
-# Abdal 4iProto client version
 
-## Client cli version
-![](https://raw.githubusercontent.com/ebrasha/abdal-socks-bridge/main/cli-c.jpg)
+# Abdal 4iProto Client
 
-## Client GUI version
-![](https://raw.githubusercontent.com/ebrasha/abdal-socks-bridge/main/gui-c.jpg)
+**Secure, Fast, and Smart SSH Tunneling — Abdal 4iProto Client: Your Personal Gateway to Encrypted Internet Access**
+
+<div align="center">
+  <img src="shot.jpg" alt="Abdal 4iProto Client"  >
+</div>
+
+
+
+## 📘 Other Languages
+
+- [🇮🇷 Persian - فارسی](README.fa.md)
+
+---
+
+Abdal 4iProto Client is a cross-platform, high-speed, and ultra-secure GUI-based client built on the custom 4iProto protocol (SSH-based). It is designed to connect to Abdal 4iProto Server and automatically create a local SOCKS5 proxy (default port: 52905) for secure internet tunneling.
+
+---
+
+## 🚀 Features
+
+- 🔐 **SSH-based 4iProto Protocol**: Fully encrypted and secure.
+- 🌐 **SOCKS5 Proxy Server**: Automatically starts on successful connection (default port: `52905`).
+- 🖥️ **Modern UI**: Beautiful interface with real-time monitoring.
+- 💻 **Windows Support**: Fully compatible with Windows systems.
+- ⚙️ **No Save Required**: All settings like exceptions are saved instantly.
+- 🚫 **Proxy Exception List**: Automatically skip selected sites from tunneling.
+- 📊 **Live Monitoring**: Track connection time and traffic.
+- 🔄 **One-Click Connect/Disconnect**: Effortless control.
+- 👨‍💻 **Developer Contact & GitHub Shortcut**: Embedded in the interface.
+- 💰 **Built-in Donation Page Access**: Support further development.
+
+---
+
+## 🧩 UI Elements Guide
+
+<div align="center">
+  <img src="help.png" alt="Abdal 4iProto Client"  >
+</div>
+
+1. **Donation**: Opens the support/donation page  
+2. **Monitoring**: Shows traffic and connection status  
+3. **About/Contact**: Info about developer and contact links  
+4. **GitHub**: Opens the GitHub project repository  
+5. **Server Configuration**: Input for Abdal 4iProto Server IP and set local proxy port  
+6. **Proxy Exceptions**: Add domains that should bypass the proxy  
+7. **Connect/Disconnect**: Toggle VPN tunnel status  
+
+---
+
+## 📥 Installation
+
+The application includes a multilingual Setup wizard.  
+Please download and install the latest version from the following link:  
+👉 [Download from GitHub Releases](https://github.com/ebrasha/abdal-4iproto-client/releases)
+
+---
+
+## 🛠️ How It Works
+
+After installing and running the application
+
+1. Connects securely to the specified Abdal 4iProto Server.
+2. Starts a local SOCKS5 proxy server.
+3. Routes all system traffic through the encrypted SSH tunnel.
+4. Skips domains entered in the exception list.
+
+---
+
  
-# 🤵 Programmer
-Ebrahim Shafiei (EbraSha)
-
-Email :  Prof.Shafiei@Gmail.com
-
-## README Translation
-- [English](README.md)
-- [فارسی](README.fa.md)
 
 
-# ✨ Features
-- Without any malicious code and spyware
-- Smart installation
-- Installation of prerequisites
-- No need for a database
-- Graphical interface
-- Automatic remover
-- Completely open source
+## 🐛 Reporting Issues
+If you encounter any issues or have configuration problems, please reach out via email at Prof.Shafiei@Gmail.com. You can also report issues on GitLab or GitHub.
 
+## ❤️ Donation
+If you find this project helpful and would like to support further development, please consider making a donation:
+- [Donate Here](https://alphajet.ir/abdal-donation)
 
-If, you are interested in free projects and helping the people of the world, send a message so that we can build a better world together.
+## 🤵 Programmer
+Handcrafted with Passion by **Ebrahim Shafiei (EbraSha)**
+- **E-Mail**: Prof.Shafiei@Gmail.com
+- **Telegram**: [@ProfShafiei](https://t.me/ProfShafiei)
 
-
- 
-
-# ✅ Supported operating systems
-
-- Windows 7 SP1 x64
-- Windows 8.1 x64
-- Windows Server 2012 R2 x64
-- Windows 10 1607 x64
-- Windows 10 1703 x64
-- Windows 10 1709 x64
-- Windows 10 1803 x64
-- Windows 10 1809 x64
-- Windows 10 1903 x64
-- Windows 10 1909 x64
-- Windows 10 2004 x64
-- Windows 10 20H2 x64
-- Windows 10 21H1 x64
-- Windows 10 21H2 x64
-- Windows 11 21H2 x64
-- Windows 11 22H2 x64
-- Windows Server 2016 x64
-- Windows Server 2019 x64
-- Windows Server 2022 x64
-- Debian.11-x64
-- Debian.10-x64
-- Ubuntu.22.04-x64
-- Ubuntu.20.04-x64
-- Ubuntu.18.04-x64
-- Centos.7-x64
-- RHEL.7-x64
-- RHEL.8-x64
-- Fedora.37-x64
-- Android
-
-# 🧲 Related projects
-1. [Abdal 4iProto server management version](https://github.com/ebrasha/abdal-4iproto-server-config)
-
-
-
- ## ⚠️ Legal disclaimer ⚠️
-
-The Abdal 4iProto protocol project is a production based on security and correct use for scientific advancements, any malicious use of this system outside the local laws of your country is beyond the responsibility of the Abdal team.
-## ❤️ Donations to the project 
-
-> USDT:      TKRmTvwkMFdgGrwvDHztLXsKAwK2WEEKUp
-
-> bitcoin:   bc1q9w9ymgz2wluax60rsuza4q0at7gpy82g8el6zj
-
-> For Iranian People -> MellatBank : 6104-3378-5301-4247
-
-## ❗ Reporting Issues 
-
-If you are facing a configuration issue or something is not working as you expected to be, please use the Prof.Shafiei@Gmail.com . Issues on GitLab are also welcomed.
-
+## 📜 License
+This project is licensed under the GPLv2 or later License. 
