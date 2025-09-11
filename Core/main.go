@@ -1,7 +1,19 @@
-// -------------------------------------------------------------------
-// Programmer       : Ebrahim Shafiei (EbraSha)
-// Email            : Prof.Shafiei@Gmail.com
-// -------------------------------------------------------------------
+/*
+ **********************************************************************
+ * -------------------------------------------------------------------
+ * Project Name : Abdal 4iProto Client
+ * File Name    : main.go
+ * Author       : Ebrahim Shafiei (EbraSha)
+ * Email        : Prof.Shafiei@Gmail.com
+ * Created On   : 2024-12-19 15:30:00
+ * Description  : Main application file for Abdal 4iProto Client with SOCKS5 proxy, SSH tunneling, domain bypass, and ad blocking functionality
+ * -------------------------------------------------------------------
+ *
+ * "Coding is an engaging and beloved hobby for me. I passionately and insatiably pursue knowledge in cybersecurity and programming."
+ * – Ebrahim Shafiei
+ *
+ **********************************************************************
+ */
 
 package main
 
@@ -59,20 +71,23 @@ var (
 type logMsg string
 
 type Config struct {
-	SSHHost              string `json:"ssh_host"`
-	SSHPort              int    `json:"ssh_port"`
-	SSHUser              string `json:"ssh_user"`
-	SSHPassword          string `json:"ssh_password"`
-	Socks5Port           int    `json:"socks5_port"`
-	AutoReconnect        string `json:"auto_reconnect"`
-	AutoReconnectTimeout int    `json:"auto_reconnect_timeout"`
+	SSHHost                    string `json:"ssh_host"`
+	SSHPort                    int    `json:"ssh_port"`
+	SSHUser                    string `json:"ssh_user"`
+	SSHPassword                string `json:"ssh_password"`
+	Socks5Port                 int    `json:"socks5_port"`
+	AutoReconnect              string `json:"auto_reconnect"`
+	AutoReconnectTimeout       int    `json:"auto_reconnect_timeout"`
+	AdBlockingLog              string `json:"ad_blocking_log"`
+	AdBlockingLogMaxSizeMB     int    `json:"ad_blocking_log_max_size_mb"`
 }
 
 type model struct {
-	cfg     *Config
-	domains []string
-	log     []string
-	logChan chan tea.Msg
+	cfg       *Config
+	domains   []string
+	blockedAds []string
+	log       []string
+	logChan   chan tea.Msg
 }
 
 // PushTrafficLog sends traffic info as JSON to configured web server
@@ -116,7 +131,7 @@ func (m model) View() string {
 ╚█████╔╝███████╗██║███████╗██║░╚███║░░░██║░░░
 ░╚════╝░╚══════╝╚═╝╚══════╝╚═╝░░╚══╝░░░╚═╝░░░
 
-Abdal 4iProto Client ver 5.75
+Abdal 4iProto Client ver 5.90
 `
 	view := styleBanner.Render(banner) + "\n"
 	view += styleBanner.Render("Programmer: Ebrahim Shafiei (EbraSha)") + "\n"
@@ -201,6 +216,12 @@ func StartSOCKS5(cfg *Config, client *ssh.Client, m *model) {
 	//m.logChan <- logMsg(styleSuccess.Render("[OK] SOCKS5 proxy listening on ") + addr)
 	msg = "SOCKS5 proxy listening on " + addr
 	logAndPush(m, "SUCCESS", msg, styleSuccess.Render("[OK] "+msg))
+	
+	// Log ad blocking status
+	if m.cfg.AdBlockingLog == "yes" {
+		adBlockMsg := fmt.Sprintf("Ad blocking enabled - logs will be saved to ad_blocking.log (max size: %d MB)", m.cfg.AdBlockingLogMaxSizeMB)
+		logAndPush(m, "INFO", adBlockMsg, styleInfo.Render("[INFO] "+adBlockMsg))
+	}
 
 	for {
 		conn, err := ln.Accept()
@@ -286,6 +307,34 @@ func handleClient(conn net.Conn, _ *ssh.Client, m *model) {
 	reply := []byte{0x05, 0x00, 0x00, 0x01}
 	reply = append(reply, make([]byte, 6)...) // 4-byte addr + 2-byte port
 	conn.Write(reply)
+
+	// Ad blocking logic: block if domain matches blocked patterns
+	if shouldBlock(destHost, m.blockedAds) {
+		blockMsg := fmt.Sprintf("Ad blocked: %s:%d", destHost, destPort)
+		logAndPush(m, "BLOCK", blockMsg, styleError.Render("[BLOCK] "+blockMsg))
+		
+		// Log blocked traffic if enabled
+		if m.cfg.AdBlockingLog == "yes" {
+			// Log to file with full date and time
+			logAdBlockToFile(conn.RemoteAddr().String(), destHost, destPort)
+			
+			// Also push to traffic log server if enabled
+			PushTrafficLog(TrafficLog{
+				Username:      m.cfg.SSHUser,
+				RemoteIP:      conn.RemoteAddr().String(),
+				BytesSent:     0,
+				BytesReceived: 0,
+				TotalBytes:    0,
+				Timestamp:     time.Now().Format(time.RFC3339),
+				Message:       "Ad traffic blocked: " + destHost,
+				Level:         "BLOCK",
+			})
+		}
+		
+		// Send connection refused response
+		conn.Write([]byte{0x05, 0x05, 0x00, 0x01})
+		return
+	}
 
 	// Bypass logic: direct connect if domain matches patterns
 	if shouldBypass(destHost, m.domains) {
@@ -388,6 +437,26 @@ func LoadDomains(path string) ([]string, error) {
 	return domains, scanner.Err()
 }
 
+// LoadBlockedAds reads blocked ad domains and IPs from ads.txt
+func LoadBlockedAds(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var blockedAds []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		blockedAds = append(blockedAds, line)
+	}
+	return blockedAds, scanner.Err()
+}
+
 // shouldBypass returns true if host matches any pattern in domains
 func shouldBypass(host string, patterns []string) bool {
 	host = strings.ToLower(host)
@@ -403,6 +472,81 @@ func shouldBypass(host string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// shouldBlock returns true if host matches any pattern in blocked ads
+func shouldBlock(host string, blockedPatterns []string) bool {
+	host = strings.ToLower(host)
+	for _, p := range blockedPatterns {
+		p = strings.ToLower(p)
+		if strings.HasPrefix(p, "*.") {
+			// wildcard suffix, e.g. *.facebook.com
+			if strings.HasSuffix(host, p[1:]) {
+				return true
+			}
+		} else if host == p {
+			return true
+		}
+	}
+	return false
+}
+
+// checkAndManageLogFileSize checks if ad_blocking.log exceeds the maximum size and deletes it if necessary
+func checkAndManageLogFileSize(maxSizeMB int) {
+	// Get executable directory to place log file next to the application
+	exePath, err := os.Executable()
+	if err != nil {
+		return
+	}
+	exeDir := filepath.Dir(exePath)
+	logFilePath := filepath.Join(exeDir, "ad_blocking.log")
+	
+	// Check if file exists
+	fileInfo, err := os.Stat(logFilePath)
+	if err != nil {
+		// File doesn't exist, nothing to do
+		return
+	}
+	
+	// Calculate file size in MB
+	fileSizeMB := fileInfo.Size() / (1024 * 1024)
+	
+	// If file size exceeds the maximum, delete it
+	if fileSizeMB >= int64(maxSizeMB) {
+		err = os.Remove(logFilePath)
+		if err != nil {
+			// Silently fail if we can't delete the file
+			return
+		}
+	}
+}
+
+// logAdBlockToFile writes ad blocking logs to a text file
+func logAdBlockToFile(remoteIP, blockedHost string, destPort uint16) {
+	// Get executable directory to place log file next to the application
+	exePath, err := os.Executable()
+	if err != nil {
+		return
+	}
+	exeDir := filepath.Dir(exePath)
+	logFilePath := filepath.Join(exeDir, "ad_blocking.log")
+	
+	// Create log entry with full date and time
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	logEntry := fmt.Sprintf("[%s] BLOCKED: %s:%d from %s\n", timestamp, blockedHost, destPort, remoteIP)
+	
+	// Open file in append mode, create if doesn't exist
+	file, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	
+	// Write log entry
+	_, err = file.WriteString(logEntry)
+	if err != nil {
+		return
+	}
 }
 
 func logAndPush(m *model, level string, msg string, styled string) {
@@ -457,9 +601,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Check and manage ad blocking log file size at startup
+	if cfg.AdBlockingLog == "yes" && cfg.AdBlockingLogMaxSizeMB > 0 {
+		checkAndManageLogFileSize(cfg.AdBlockingLogMaxSizeMB)
+	}
+
 	domains, err := LoadDomains("domains.txt")
 	if err != nil {
 		fmt.Println("Failed to load domains.txt:", err)
+		os.Exit(1)
+	}
+
+	blockedAds, err := LoadBlockedAds("ads.txt")
+	if err != nil {
+		fmt.Println("Failed to load ads.txt:", err)
 		os.Exit(1)
 	}
 	logChan := make(chan tea.Msg, 100)
@@ -470,9 +625,10 @@ func main() {
 	}
 
 	p := tea.NewProgram(model{
-		cfg:     cfg,
-		domains: domains,
-		logChan: logChan})
+		cfg:       cfg,
+		domains:   domains,
+		blockedAds: blockedAds,
+		logChan:   logChan})
 	go func() {
 		for msg := range logChan {
 			p.Send(msg)
