@@ -138,6 +138,9 @@ namespace Abdal_Security_Group_App
             string autoReconnect = "yes";
             int autoReconnectTimeout = 2000;
 
+            string ad_blocking_log = "yes";
+            int ad_blocking_log_max_size_mb = 1;
+
             Config.Save(
                 sshHost,
                 sshPort.ToString(),        // because method signature expects string
@@ -145,7 +148,9 @@ namespace Abdal_Security_Group_App
                 sshPassword,
                 socks5Port.ToString(),     // because method signature expects string
                 autoReconnect,
-                autoReconnectTimeout
+                autoReconnectTimeout,
+                ad_blocking_log,
+                ad_blocking_log_max_size_mb
             );
 
             ab_player.sPlayer("done");

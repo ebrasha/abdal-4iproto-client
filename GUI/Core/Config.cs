@@ -19,6 +19,8 @@ namespace Abdal_Security_Group_App.Core
         public int socks5_port { get; set; } = 0;
         public string auto_reconnect { get; set; } = "yes";
         public int auto_reconnect_timeout { get; set; } = 2000;
+        public string ad_blocking_log { get; set; } = "yes";
+        public int ad_blocking_log_max_size_mb { get; set; } = 1;
 
         private static readonly string configFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
 
@@ -35,7 +37,9 @@ namespace Abdal_Security_Group_App.Core
                 ssh_password = sshPassword ?? "empty",
                 socks5_port = int.TryParse(socks5Port, out var p2) ? p2 : 52905,
                 auto_reconnect = "yes",
-                auto_reconnect_timeout = 2000
+                auto_reconnect_timeout = 2000,
+                ad_blocking_log = "yes",
+                ad_blocking_log_max_size_mb = 1
             };
 
             var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
@@ -43,7 +47,7 @@ namespace Abdal_Security_Group_App.Core
             File.WriteAllText(configFilePath, json);
         }
 
-        public static void Save(string sshHost, string sshPort, string sshUser, string sshPassword, string socks5Port, string autoReconnect = "yes", int timeout = 2000)
+        public static void Save(string sshHost, string sshPort, string sshUser, string sshPassword, string socks5Port, string autoReconnect = "yes", int timeout = 2000,string ad_blocking_log = "yes",int ad_blocking_log_max_size_mb = 1)
         {
             var config = new Config
             {
@@ -53,7 +57,9 @@ namespace Abdal_Security_Group_App.Core
                 ssh_password = sshPassword ?? "",
                 socks5_port = int.TryParse(socks5Port, out var p2) ? p2 : 52905,
                 auto_reconnect = autoReconnect,
-                auto_reconnect_timeout = timeout
+                auto_reconnect_timeout = timeout,
+                ad_blocking_log = ad_blocking_log,
+                ad_blocking_log_max_size_mb = ad_blocking_log_max_size_mb
             };
 
             var jsonOptions = new JsonSerializerOptions { WriteIndented = true };

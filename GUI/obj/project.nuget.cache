@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "joYKwjBtrY8=",
+  "dgSpecHash": "XKSpqrIk8LQ=",
   "success": true,
   "projectFilePath": "C:\\Users\\EbraSha\\Documents\\Github\\Abdal 4iProto\\Abdal 4iProto Client\\Dev\\GUI\\Abdal 4iProto Client.csproj",
   "expectedPackageFiles": [
@@ -72,7 +72,18 @@
     "C:\\Users\\EbraSha\\.nuget\\packages\\system.web.services.description\\4.10.0\\system.web.services.description.4.10.0.nupkg.sha512",
     "C:\\Users\\EbraSha\\.nuget\\packages\\system.windows.extensions\\8.0.0\\system.windows.extensions.8.0.0.nupkg.sha512",
     "C:\\Users\\EbraSha\\.nuget\\packages\\telerik.licensing\\1.4.6\\telerik.licensing.1.4.6.nupkg.sha512",
-    "C:\\Users\\EbraSha\\.nuget\\packages\\ui.for.winforms.allcontrols.net80\\2025.1.211\\ui.for.winforms.allcontrols.net80.2025.1.211.nupkg.sha512"
+    "C:\\Users\\EbraSha\\.nuget\\packages\\ui.for.winforms.allcontrols.net80\\2025.1.211\\ui.for.winforms.allcontrols.net80.2025.1.211.nupkg.sha512",
+    "C:\\Users\\EbraSha\\.nuget\\packages\\microsoft.netcore.app.ref\\8.0.17\\microsoft.netcore.app.ref.8.0.17.nupkg.sha512",
+    "C:\\Users\\EbraSha\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.17\\microsoft.windowsdesktop.app.ref.8.0.17.nupkg.sha512",
+    "C:\\Users\\EbraSha\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\8.0.17\\microsoft.aspnetcore.app.ref.8.0.17.nupkg.sha512",
+    "C:\\Users\\EbraSha\\.nuget\\packages\\microsoft.netcore.app.host.win-x64\\8.0.17\\microsoft.netcore.app.host.win-x64.8.0.17.nupkg.sha512"
   ],
-  "logs": []
+  "logs": [
+    {
+      "code": "NU1900",
+      "level": "Warning",
+      "warningLevel": 1,
+      "message": "Error occurred while getting package vulnerability data: Unable to load the service index for source https://api.nuget.org/v3/index.json."
+    }
+  ]
 }

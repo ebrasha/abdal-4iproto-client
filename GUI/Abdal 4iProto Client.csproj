@@ -8,9 +8,9 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>6.25</Version>
-    <AssemblyVersion>6.25</AssemblyVersion>
-    <FileVersion>6.25</FileVersion>
+    <Version>6.30</Version>
+    <AssemblyVersion>6.30</AssemblyVersion>
+    <FileVersion>6.30</FileVersion>
     <ApplicationIcon>Dev\UI\Roc.ico</ApplicationIcon>
   </PropertyGroup>
 
