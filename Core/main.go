@@ -5,8 +5,8 @@
  * File Name    : main.go
  * Author       : Ebrahim Shafiei (EbraSha)
  * Email        : Prof.Shafiei@Gmail.com
- * Created On   : 2024-12-19 15:30:00
- * Description  : Main application file for Abdal 4iProto Client with SOCKS5 proxy, SSH tunneling, domain bypass, and ad blocking functionality
+ * Created On   : 2025-01-27 10:30:00
+ * Description  : Main application file for Abdal 4iProto Client with SOCKS5 proxy, SSH tunneling, UDP support, domain bypass, and ad blocking functionality
  * -------------------------------------------------------------------
  *
  * "Coding is an engaging and beloved hobby for me. I passionately and insatiably pursue knowledge in cybersecurity and programming."
@@ -47,6 +47,27 @@ var (
 	sshClientMutex   sync.RWMutex
 )
 
+// UDP Helper structures and functions for direct-udpip support
+type directUDPIPReq struct {
+	HostToConnect     string
+	PortToConnect     uint32
+	OriginatorAddress string
+	OriginatorPort    uint32
+}
+
+type udpChan struct {
+	ch        ssh.Channel
+	lastUsed  time.Time
+	lastAddr  *net.UDPAddr
+	closeOnce sync.Once
+}
+
+type udpChanCache struct {
+	mu      sync.Mutex
+	entries map[string]*udpChan
+	ttl     time.Duration
+}
+
 // TrafficLog is used to report traffic stats to optional log server
 type TrafficLog struct {
 	Username      string `json:"username"`       // From config.SSHUser
@@ -57,6 +78,164 @@ type TrafficLog struct {
 	Timestamp     string `json:"timestamp"`      // Always filled
 	Message       string `json:"message"`        // Optional log message
 	Level         string `json:"level"`          // "INFO", "ERROR", etc.
+}
+
+// UDP Helper Functions
+func openUDPChannel(cl *ssh.Client, host string, port uint32) (ssh.Channel, <-chan *ssh.Request, error) {
+	req := directUDPIPReq{
+		HostToConnect:     host,
+		PortToConnect:     port,
+		OriginatorAddress: "0.0.0.0",
+		OriginatorPort:    0,
+	}
+	extra := ssh.Marshal(&req)
+	ch, reqs, err := cl.OpenChannel("direct-udpip", extra)
+	return ch, reqs, err
+}
+
+func sendUDPDatagram(ch ssh.Channel, payload []byte) error {
+	if len(payload) > 65535 {
+		return fmt.Errorf("oversize datagram")
+	}
+	var lb [2]byte
+	binary.BigEndian.PutUint16(lb[:], uint16(len(payload)))
+	if _, err := ch.Write(lb[:]); err != nil {
+		return err
+	}
+	_, err := ch.Write(payload)
+	return err
+}
+
+func recvUDPDatagram(r io.Reader) ([]byte, error) {
+	var lb [2]byte
+	if _, err := io.ReadFull(r, lb[:]); err != nil {
+		return nil, err
+	}
+	n := int(binary.BigEndian.Uint16(lb[:]))
+	if n <= 0 || n > 65535 {
+		return nil, fmt.Errorf("bad length")
+	}
+	b := make([]byte, n)
+	_, err := io.ReadFull(r, b)
+	return b, err
+}
+
+func parseSocks5UDP(b []byte) (string, uint16, []byte, error) {
+	if len(b) < 4 {
+		return "", 0, nil, fmt.Errorf("short packet")
+	}
+	if b[0] != 0x00 || b[1] != 0x00 {
+		return "", 0, nil, fmt.Errorf("bad rsv")
+	}
+	if b[2] != 0x00 {
+		return "", 0, nil, fmt.Errorf("frag unsupported")
+	}
+	atyp := b[3]
+	p := 4
+	var host string
+	switch atyp {
+	case 0x01: // IPv4
+		if len(b) < p+4+2 {
+			return "", 0, nil, fmt.Errorf("short ipv4")
+		}
+		host = net.IP(b[p : p+4]).String()
+		p += 4
+	case 0x03: // Domain
+		if len(b) < p+1 {
+			return "", 0, nil, fmt.Errorf("short domain len")
+		}
+		dlen := int(b[p])
+		p++
+		if len(b) < p+dlen+2 {
+			return "", 0, nil, fmt.Errorf("short domain")
+		}
+		host = string(b[p : p+dlen])
+		p += dlen
+	case 0x04: // IPv6
+		if len(b) < p+16+2 {
+			return "", 0, nil, fmt.Errorf("short ipv6")
+		}
+		host = net.IP(b[p : p+16]).String()
+		p += 16
+	default:
+		return "", 0, nil, fmt.Errorf("bad atyp")
+	}
+	if len(b) < p+2 {
+		return "", 0, nil, fmt.Errorf("short port")
+	}
+	port := binary.BigEndian.Uint16(b[p : p+2])
+	p += 2
+	if len(b) < p {
+		return "", 0, nil, fmt.Errorf("short payload")
+	}
+	return host, port, b[p:], nil
+}
+
+func buildSocks5UDP(host string, port uint16, payload []byte) ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	buf.Write([]byte{0x00, 0x00})
+	buf.WriteByte(0x00)
+	ip := net.ParseIP(host)
+	if ip4 := ip.To4(); ip4 != nil {
+		buf.WriteByte(0x01)
+		buf.Write(ip4.To4())
+	} else if ip != nil && ip.To16() != nil {
+		buf.WriteByte(0x04)
+		buf.Write(ip.To16())
+	} else {
+		if len(host) > 255 {
+			return nil, fmt.Errorf("domain too long")
+		}
+		buf.WriteByte(0x03)
+		buf.WriteByte(byte(len(host)))
+		buf.WriteString(host)
+	}
+	var p [2]byte
+	binary.BigEndian.PutUint16(p[:], port)
+	buf.Write(p[:])
+	buf.Write(payload)
+	return buf.Bytes(), nil
+}
+
+func newUDPChanCache(ttl time.Duration) *udpChanCache {
+	return &udpChanCache{entries: make(map[string]*udpChan), ttl: ttl}
+}
+
+func (c *udpChanCache) getOrCreate(key string, dial func() (*udpChan, error)) (*udpChan, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if uc, ok := c.entries[key]; ok {
+		uc.lastUsed = time.Now()
+		return uc, nil
+	}
+	uc, err := dial()
+	if err != nil {
+		return nil, err
+	}
+	uc.lastUsed = time.Now()
+	c.entries[key] = uc
+	return uc, nil
+}
+
+func (c *udpChanCache) janitor() {
+	t := time.NewTicker(c.ttl / 2)
+	defer t.Stop()
+	for range t.C {
+		now := time.Now()
+		var stale []string
+		c.mu.Lock()
+		for k, uc := range c.entries {
+			if now.Sub(uc.lastUsed) > c.ttl {
+				stale = append(stale, k)
+			}
+		}
+		for _, k := range stale {
+			uc := c.entries[k]
+			delete(c.entries, k)
+			uc.closeOnce.Do(func() { _ = uc.ch.Close() })
+		}
+		c.mu.Unlock()
+	}
 }
 
 var (
@@ -131,7 +310,7 @@ func (m model) View() string {
 ╚█████╔╝███████╗██║███████╗██║░╚███║░░░██║░░░
 ░╚════╝░╚══════╝╚═╝╚══════╝╚═╝░░╚══╝░░░╚═╝░░░
 
-Abdal 4iProto Client ver 5.90
+Abdal 4iProto Client ver 6.25
 `
 	view := styleBanner.Render(banner) + "\n"
 	view += styleBanner.Render("Programmer: Ebrahim Shafiei (EbraSha)") + "\n"
@@ -271,8 +450,149 @@ func handleClient(conn net.Conn, _ *ssh.Client, m *model) {
 	if _, err := io.ReadFull(conn, buf[:4]); err != nil {
 		return
 	}
+	
+	// Handle UDP ASSOCIATE command (0x03)
+	if buf[1] == 0x03 {
+		// Bind a local UDP socket to receive UDP packets from the client application
+		udpAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+		udpConn, err := net.ListenUDP("udp", udpAddr)
+		if err != nil {
+			// reply: general failure
+			conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
+			return
+		}
+		defer udpConn.Close()
+
+		// Send success reply with BND.ADDR/BND.PORT of our UDP bind
+		la := udpConn.LocalAddr().(*net.UDPAddr)
+		reply := bytes.NewBuffer(nil)
+		reply.WriteByte(0x05)        // VER
+		reply.WriteByte(0x00)        // REP = succeeded
+		reply.WriteByte(0x00)        // RSV
+		reply.WriteByte(0x01)        // ATYP = IPv4 (using 127.0.0.1)
+		ip4 := la.IP.To4()
+		if ip4 == nil {
+			ip4 = net.IPv4(127, 0, 0, 1)
+		}
+		reply.Write(ip4)
+		var p2 [2]byte
+		binary.BigEndian.PutUint16(p2[:], uint16(la.Port))
+		reply.Write(p2[:])
+		conn.Write(reply.Bytes())
+
+		// Log UDP ASSOCIATE request
+		logAndPush(m, "INFO", "UDP ASSOCIATE request received", styleInfo.Render("[INFO] UDP ASSOCIATE request received"))
+
+		// Create UDP channel cache for efficient connection reuse
+		cache := newUDPChanCache(90 * time.Second)
+		go cache.janitor()
+
+		// Relay loop: UDP <-> SSH "direct-udpip"
+		// Keep TCP control connection alive
+		go func() {
+			io.Copy(io.Discard, conn) // keep TCP control alive
+		}()
+
+		bufUDP := make([]byte, 65535)
+		for {
+			udpConn.SetReadDeadline(time.Now().Add(180 * time.Second))
+			n, clientAddr, err := udpConn.ReadFromUDP(bufUDP)
+			if err != nil {
+				return
+			}
+			host, port, payload, err := parseSocks5UDP(bufUDP[:n])
+			if err != nil {
+				continue
+			}
+			key := fmt.Sprintf("%s:%d", host, port)
+
+			uc, err := cache.getOrCreate(key, func() (*udpChan, error) {
+				ch, reqs, err := openUDPChannel(client, host, uint32(port))
+				if err != nil {
+					return nil, err
+				}
+				go ssh.DiscardRequests(reqs)
+				u := &udpChan{ch: ch}
+				go func(dest string, uch *udpChan) {
+					for {
+						// Use a timeout channel for reading
+						timeout := time.After(120 * time.Second)
+						dataChan := make(chan []byte, 1)
+						errChan := make(chan error, 1)
+						
+						go func() {
+							data, err := recvUDPDatagram(uch.ch)
+							if err != nil {
+								errChan <- err
+								return
+							}
+							dataChan <- data
+						}()
+						
+						select {
+						case data := <-dataChan:
+							uchAddr := func() *net.UDPAddr {
+								cache.mu.Lock()
+								defer cache.mu.Unlock()
+								if x, ok := cache.entries[dest]; ok {
+									return x.lastAddr
+								}
+								return nil
+							}()
+							if uchAddr != nil {
+								pkt, e := buildSocks5UDP(host, port, data)
+								if e == nil {
+									_, _ = udpConn.WriteToUDP(pkt, uchAddr)
+								}
+							}
+						case <-errChan:
+							uch.closeOnce.Do(func() { _ = uch.ch.Close() })
+							return
+						case <-timeout:
+							uch.closeOnce.Do(func() { _ = uch.ch.Close() })
+							return
+						}
+					}
+				}(key, u)
+				return u, nil
+			})
+			if err != nil {
+				continue
+			}
+
+			cache.mu.Lock()
+			uc.lastAddr = clientAddr
+			uc.lastUsed = time.Now()
+			cache.mu.Unlock()
+
+			// Send UDP datagram with timeout using goroutine
+			sendChan := make(chan error, 1)
+			go func() {
+				sendChan <- sendUDPDatagram(uc.ch, payload)
+			}()
+			
+			select {
+			case err := <-sendChan:
+				if err != nil {
+					uc.closeOnce.Do(func() { _ = uc.ch.Close() })
+					cache.mu.Lock()
+					delete(cache.entries, key)
+					cache.mu.Unlock()
+					continue
+				}
+			case <-time.After(10 * time.Second):
+				uc.closeOnce.Do(func() { _ = uc.ch.Close() })
+				cache.mu.Lock()
+				delete(cache.entries, key)
+				cache.mu.Unlock()
+				continue
+			}
+		}
+		return
+	}
+
 	if buf[1] != 0x01 {
-		// Only CONNECT supported
+		// Only CONNECT and UDP ASSOCIATE supported
 		conn.Write([]byte{0x05, 0x07, 0x00, 0x01})
 		return
 	}
