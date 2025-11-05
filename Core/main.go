@@ -341,6 +341,7 @@ func maintainSSHConnection(cfg *Config, m *model) {
 			Auth:            []ssh.AuthMethod{ssh.Password(cfg.SSHPassword)},
 			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 			Timeout:         5 * time.Second,
+			ClientVersion: "SSH-2.0-Abdal-4iProtoClient",
 		})
 		if err != nil {
 			//m.logChan <- logMsg(styleError.Render("[ERROR] SSH connect failed: " + err.Error()))
