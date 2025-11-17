@@ -32,12 +32,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
-	"unsafe"
 )
 
 var pushEnabled bool
@@ -310,7 +307,7 @@ func (m model) View() string {
 ╚█████╔╝███████╗██║███████╗██║░╚███║░░░██║░░░
 ░╚════╝░╚══════╝╚═╝╚══════╝╚═╝░░╚══╝░░░╚═╝░░░
 
-Abdal 4iProto Client ver 6.25
+Abdal 4iProto Client ver 6.30
 `
 	view := styleBanner.Render(banner) + "\n"
 	view += styleBanner.Render("Programmer: Ebrahim Shafiei (EbraSha)") + "\n"
@@ -721,21 +718,6 @@ func handleClient(conn net.Conn, _ *ssh.Client, m *model) {
 		Level:         "INFO",
 	})
 
-}
-
-// SetConsoleTitle sets the terminal window title across platforms
-func SetConsoleTitle(title string) {
-	switch runtime.GOOS {
-	case "windows":
-		// Use Windows API to set console title
-		ptr := syscall.StringToUTF16Ptr(title)
-		kernel32 := syscall.NewLazyDLL("kernel32.dll")
-		setConsoleTitle := kernel32.NewProc("SetConsoleTitleW")
-		setConsoleTitle.Call(uintptr(unsafe.Pointer(ptr)))
-	default:
-		// For Linux/macOS, use ANSI escape sequence
-		fmt.Printf("\033]0;%s\007", title)
-	}
 }
 
 // LoadDomains reads wildcard/domain patterns from domains.txt
