@@ -307,7 +307,7 @@ func (m model) View() string {
 ╚█████╔╝███████╗██║███████╗██║░╚███║░░░██║░░░
 ░╚════╝░╚══════╝╚═╝╚══════╝╚═╝░░╚══╝░░░╚═╝░░░
 
-Abdal 4iProto Client ver 6.30
+Abdal 4iProto Client ver 6.32
 `
 	view := styleBanner.Render(banner) + "\n"
 	view += styleBanner.Render("Programmer: Ebrahim Shafiei (EbraSha)") + "\n"
@@ -491,13 +491,49 @@ func handleClient(conn net.Conn, _ *ssh.Client, m *model) {
 			io.Copy(io.Discard, conn) // keep TCP control alive
 		}()
 
+		// Create UDP packet reader with IP defragmentation support
+		packetReader, err := NewUDPPacketReader(udpConn)
+		if err != nil {
+			logAndPush(m, "WARN", "Failed to create packet reader with defragmentation, using regular UDP: "+err.Error(), styleWarn.Render("[WARN] Failed to create packet reader with defragmentation, using regular UDP: "+err.Error()))
+		}
+		if packetReader != nil {
+			defer packetReader.Close()
+			if packetReader.useRaw {
+				logAndPush(m, "INFO", "IP defragmentation enabled (raw socket mode)", styleInfo.Render("[INFO] IP defragmentation enabled (raw socket mode)"))
+			} else {
+				logAndPush(m, "INFO", "Using regular UDP socket (OS handles defragmentation)", styleInfo.Render("[INFO] Using regular UDP socket (OS handles defragmentation)"))
+			}
+		}
+
 		bufUDP := make([]byte, 65535)
 		for {
 			udpConn.SetReadDeadline(time.Now().Add(180 * time.Second))
-			n, clientAddr, err := udpConn.ReadFromUDP(bufUDP)
-			if err != nil {
-				return
+			
+			var n int
+			var clientAddr *net.UDPAddr
+			var err error
+			
+			// Use packet reader if available and in raw mode, otherwise use regular UDP
+			if packetReader != nil && packetReader.useRaw {
+				var payload []byte
+				payload, clientAddr, err = packetReader.ReadUDPPacket()
+				if err != nil {
+					return
+				}
+				if len(payload) > len(bufUDP) {
+					// Payload too large, skip
+					continue
+				}
+				copy(bufUDP, payload)
+				n = len(payload)
+			} else {
+				// Regular UDP reading
+				n, clientAddr, err = udpConn.ReadFromUDP(bufUDP)
+				if err != nil {
+					return
+				}
 			}
+			
 			host, port, payload, err := parseSocks5UDP(bufUDP[:n])
 			if err != nil {
 				continue
