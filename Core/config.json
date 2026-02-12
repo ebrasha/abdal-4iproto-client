@@ -7,5 +7,20 @@
   "auto_reconnect": "yes",
   "auto_reconnect_timeout": 2000,
   "ad_blocking_log": "yes",
-  "ad_blocking_log_max_size_mb": 1
+  "ad_blocking_log_max_size_mb": 1,
+  "port_forwarding": "no",
+  "port_forwarding_log": "no",
+  "port_forwarding_log_max_size_mb": 2,
+  "port_forwarding_settings": [
+    {
+      "local_port": 443,
+      "remote_target": "127.0.0.1:10000",
+      "description": "V2Ray Tunnel: 443 -> 10000"
+    },
+    {
+      "local_port": 2083,
+      "remote_target": "127.0.0.1:20083",
+      "description": "Reality Tunnel: 2083 -> 20083"
+    }
+  ]
 }

@@ -6,7 +6,7 @@
  * Author       : Ebrahim Shafiei (EbraSha)
  * Email        : Prof.Shafiei@Gmail.com
  * Created On   : 2025-01-27 10:30:00
- * Description  : Main application file for Abdal 4iProto Client with SOCKS5 proxy, SSH tunneling, UDP support, domain bypass, and ad blocking functionality
+ * Description  : Main application file for Abdal 4iProto Client with SOCKS5 proxy, SSH tunneling, port forwarding, UDP support, domain bypass, and ad blocking functionality
  * -------------------------------------------------------------------
  *
  * "Coding is an engaging and beloved hobby for me. I passionately and insatiably pursue knowledge in cybersecurity and programming."
@@ -246,16 +246,27 @@ var (
 
 type logMsg string
 
+// PortForwardingItem represents a single port forwarding rule (local listen -> remote target via SSH).
+type PortForwardingItem struct {
+	LocalPort    int    `json:"local_port"`
+	RemoteTarget string `json:"remote_target"`
+	Description  string `json:"description"`
+}
+
 type Config struct {
-	SSHHost                    string `json:"ssh_host"`
-	SSHPort                    int    `json:"ssh_port"`
-	SSHUser                    string `json:"ssh_user"`
-	SSHPassword                string `json:"ssh_password"`
-	Socks5Port                 int    `json:"socks5_port"`
-	AutoReconnect              string `json:"auto_reconnect"`
-	AutoReconnectTimeout       int    `json:"auto_reconnect_timeout"`
-	AdBlockingLog              string `json:"ad_blocking_log"`
-	AdBlockingLogMaxSizeMB     int    `json:"ad_blocking_log_max_size_mb"`
+	SSHHost                    string                `json:"ssh_host"`
+	SSHPort                    int                   `json:"ssh_port"`
+	SSHUser                    string                `json:"ssh_user"`
+	SSHPassword                string                `json:"ssh_password"`
+	Socks5Port                 int                   `json:"socks5_port"`
+	AutoReconnect              string                `json:"auto_reconnect"`
+	AutoReconnectTimeout       int                   `json:"auto_reconnect_timeout"`
+	AdBlockingLog              string                `json:"ad_blocking_log"`
+	AdBlockingLogMaxSizeMB     int                   `json:"ad_blocking_log_max_size_mb"`
+	PortForwarding             string                `json:"port_forwarding"`
+	PortForwardingSettings     []PortForwardingItem  `json:"port_forwarding_settings"`
+	PortForwardingLog          string                `json:"port_forwarding_log"`
+	PortForwardingLogMaxSizeMB int                   `json:"port_forwarding_log_max_size_mb"`
 }
 
 type model struct {
@@ -307,7 +318,7 @@ func (m model) View() string {
 ╚█████╔╝███████╗██║███████╗██║░╚███║░░░██║░░░
 ░╚════╝░╚══════╝╚═╝╚══════╝╚═╝░░╚══╝░░░╚═╝░░░
 
-Abdal 4iProto Client ver 6.30
+Abdal 4iProto Client ver 7.0
 `
 	view := styleBanner.Render(banner) + "\n"
 	view += styleBanner.Render("Programmer: Ebrahim Shafiei (EbraSha)") + "\n"
@@ -371,6 +382,7 @@ func maintainSSHConnection(cfg *Config, m *model) {
 func startSSH(cfg *Config, m *model) tea.Cmd {
 	return func() tea.Msg {
 		go maintainSSHConnection(cfg, m)
+		go StartPortForwarder(cfg, m)
 		StartSOCKS5(cfg, nil, m)
 		return nil
 	}
@@ -419,6 +431,73 @@ func getSSHClient() *ssh.Client {
 	sshClientMutex.RLock()
 	defer sshClientMutex.RUnlock()
 	return currentSSHClient
+}
+
+// handleBridge pipes data between a local connection and a remote target over the active SSH client.
+// If no SSH client is available, the local connection is closed and the function returns.
+func handleBridge(localConn net.Conn, remoteTarget, description string, localPort int, m *model) {
+	clientIP := localConn.RemoteAddr().String()
+	defer func() {
+		localConn.Close()
+		logPortForwardToFile(m.cfg, "CONNECTION_CLOSED", localPort, remoteTarget, description, clientIP, "")
+	}()
+	logPortForwardToFile(m.cfg, "CONNECTION_OPENED", localPort, remoteTarget, description, clientIP, "")
+	client := getSSHClient()
+	if client == nil {
+		logPortForwardToFile(m.cfg, "CONNECTION_ERROR", localPort, remoteTarget, description, clientIP, "no active SSH client")
+		logAndPush(m, "ERROR", "Port forward: no active SSH client", styleError.Render("[ERROR] Port forward: no active SSH client"))
+		return
+	}
+	remoteConn, err := client.Dial("tcp", remoteTarget)
+	if err != nil {
+		logPortForwardToFile(m.cfg, "CONNECTION_ERROR", localPort, remoteTarget, description, clientIP, err.Error())
+		logAndPush(m, "ERROR", "Port forward dial failed: "+err.Error(), styleError.Render("[ERROR] Port forward dial failed: "+err.Error()))
+		return
+	}
+	defer remoteConn.Close()
+	go io.Copy(remoteConn, localConn)
+	io.Copy(localConn, remoteConn)
+}
+
+// StartPortForwarder starts TCP listeners for each port forwarding rule and bridges traffic over SSH.
+// If port_forwarding is not "yes", it returns without allocating any resources.
+func StartPortForwarder(cfg *Config, m *model) {
+	if cfg.PortForwarding != "yes" {
+		return
+	}
+	if len(cfg.PortForwardingSettings) == 0 {
+		return
+	}
+	if m != nil && cfg.PortForwardingLog == "yes" {
+		msg := fmt.Sprintf("Port forwarding log enabled - events saved to port_forwarding.log (max size: %d MB)", cfg.PortForwardingLogMaxSizeMB)
+		logAndPush(m, "INFO", msg, styleInfo.Render("[INFO] "+msg))
+	}
+	for i := range cfg.PortForwardingSettings {
+		item := cfg.PortForwardingSettings[i]
+		go func(pf PortForwardingItem) {
+			addr := fmt.Sprintf("127.0.0.1:%d", pf.LocalPort)
+			ln, err := net.Listen("tcp", addr)
+			if err != nil {
+				msg := fmt.Sprintf("Port forward listener failed %s: %v", pf.Description, err)
+				logAndPush(m, "ERROR", msg, styleError.Render("[ERROR] "+msg))
+				logPortForwardToFile(cfg, "CONNECTION_ERROR", pf.LocalPort, pf.RemoteTarget, pf.Description, "", err.Error())
+				return
+			}
+			defer ln.Close()
+			logPortForwardToFile(cfg, "LISTENER_STARTED", pf.LocalPort, pf.RemoteTarget, pf.Description, "", "")
+			msg := fmt.Sprintf("Port forward listening: %s (%s)", pf.Description, addr)
+			logAndPush(m, "SUCCESS", msg, styleSuccess.Render("[OK] "+msg))
+			for {
+				conn, err := ln.Accept()
+				if err != nil {
+					logAndPush(m, "ERROR", "Port forward accept: "+err.Error(), styleError.Render("[ERROR] Port forward accept: "+err.Error()))
+					logPortForwardToFile(cfg, "CONNECTION_ERROR", pf.LocalPort, pf.RemoteTarget, pf.Description, "", "accept: "+err.Error())
+					continue
+				}
+				go handleBridge(conn, pf.RemoteTarget, pf.Description, pf.LocalPort, m)
+			}
+		}(item)
+	}
 }
 
 func handleClient(conn net.Conn, _ *ssh.Client, m *model) {
@@ -491,13 +570,49 @@ func handleClient(conn net.Conn, _ *ssh.Client, m *model) {
 			io.Copy(io.Discard, conn) // keep TCP control alive
 		}()
 
+		// Create UDP packet reader with IP defragmentation support
+		packetReader, err := NewUDPPacketReader(udpConn)
+		if err != nil {
+			logAndPush(m, "WARN", "Failed to create packet reader with defragmentation, using regular UDP: "+err.Error(), styleWarn.Render("[WARN] Failed to create packet reader with defragmentation, using regular UDP: "+err.Error()))
+		}
+		if packetReader != nil {
+			defer packetReader.Close()
+			if packetReader.useRaw {
+				logAndPush(m, "INFO", "IP defragmentation enabled (raw socket mode)", styleInfo.Render("[INFO] IP defragmentation enabled (raw socket mode)"))
+			} else {
+				logAndPush(m, "INFO", "Using regular UDP socket (OS handles defragmentation)", styleInfo.Render("[INFO] Using regular UDP socket (OS handles defragmentation)"))
+			}
+		}
+
 		bufUDP := make([]byte, 65535)
 		for {
 			udpConn.SetReadDeadline(time.Now().Add(180 * time.Second))
-			n, clientAddr, err := udpConn.ReadFromUDP(bufUDP)
-			if err != nil {
-				return
+			
+			var n int
+			var clientAddr *net.UDPAddr
+			var err error
+			
+			// Use packet reader if available and in raw mode, otherwise use regular UDP
+			if packetReader != nil && packetReader.useRaw {
+				var payload []byte
+				payload, clientAddr, err = packetReader.ReadUDPPacket()
+				if err != nil {
+					return
+				}
+				if len(payload) > len(bufUDP) {
+					// Payload too large, skip
+					continue
+				}
+				copy(bufUDP, payload)
+				n = len(payload)
+			} else {
+				// Regular UDP reading
+				n, clientAddr, err = udpConn.ReadFromUDP(bufUDP)
+				if err != nil {
+					return
+				}
 			}
+			
 			host, port, payload, err := parseSocks5UDP(bufUDP[:n])
 			if err != nil {
 				continue
@@ -803,25 +918,60 @@ func checkAndManageLogFileSize(maxSizeMB int) {
 	}
 	exeDir := filepath.Dir(exePath)
 	logFilePath := filepath.Join(exeDir, "ad_blocking.log")
-	
-	// Check if file exists
-	fileInfo, err := os.Stat(logFilePath)
+	checkAndTruncateLogBySize(logFilePath, maxSizeMB)
+}
+
+// checkAndManagePortForwardLogFileSize checks if port_forwarding.log exceeds the maximum size and deletes it if necessary
+func checkAndManagePortForwardLogFileSize(maxSizeMB int) {
+	exePath, err := os.Executable()
 	if err != nil {
-		// File doesn't exist, nothing to do
 		return
 	}
-	
-	// Calculate file size in MB
-	fileSizeMB := fileInfo.Size() / (1024 * 1024)
-	
-	// If file size exceeds the maximum, delete it
-	if fileSizeMB >= int64(maxSizeMB) {
-		err = os.Remove(logFilePath)
-		if err != nil {
-			// Silently fail if we can't delete the file
-			return
-		}
+	exeDir := filepath.Dir(exePath)
+	logFilePath := filepath.Join(exeDir, "port_forwarding.log")
+	checkAndTruncateLogBySize(logFilePath, maxSizeMB)
+}
+
+// checkAndTruncateLogBySize removes the log file when it exceeds maxSizeMB
+func checkAndTruncateLogBySize(logFilePath string, maxSizeMB int) {
+	if maxSizeMB <= 0 {
+		return
 	}
+	fileInfo, err := os.Stat(logFilePath)
+	if err != nil {
+		return
+	}
+	fileSizeMB := fileInfo.Size() / (1024 * 1024)
+	if fileSizeMB >= int64(maxSizeMB) {
+		_ = os.Remove(logFilePath)
+	}
+}
+
+// logPortForwardToFile writes port forwarding events to port_forwarding.log when port_forwarding_log is enabled.
+// event: LISTENER_STARTED, CONNECTION_OPENED, CONNECTION_CLOSED, CONNECTION_ERROR
+func logPortForwardToFile(cfg *Config, event string, localPort int, remoteTarget, description, clientIP, errMsg string) {
+	if cfg == nil || cfg.PortForwardingLog != "yes" {
+		return
+	}
+	exePath, err := os.Executable()
+	if err != nil {
+		return
+	}
+	exeDir := filepath.Dir(exePath)
+	logFilePath := filepath.Join(exeDir, "port_forwarding.log")
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	line := fmt.Sprintf("[%s] [%s] local_port=%d remote_target=%s description=%q client=%s",
+		timestamp, event, localPort, remoteTarget, description, clientIP)
+	if errMsg != "" {
+		line += " error=" + errMsg
+	}
+	line += "\n"
+	file, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	_, _ = file.WriteString(line)
+	_ = file.Close()
 }
 
 // logAdBlockToFile writes ad blocking logs to a text file
@@ -907,6 +1057,10 @@ func main() {
 	// Check and manage ad blocking log file size at startup
 	if cfg.AdBlockingLog == "yes" && cfg.AdBlockingLogMaxSizeMB > 0 {
 		checkAndManageLogFileSize(cfg.AdBlockingLogMaxSizeMB)
+	}
+	// Check and manage port forwarding log file size at startup
+	if cfg.PortForwardingLog == "yes" && cfg.PortForwardingLogMaxSizeMB > 0 {
+		checkAndManagePortForwardLogFileSize(cfg.PortForwardingLogMaxSizeMB)
 	}
 
 	domains, err := LoadDomains("domains.txt")

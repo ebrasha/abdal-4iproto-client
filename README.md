@@ -33,6 +33,7 @@ Abdal 4iProto Client is a cross-platform, high-speed, and ultra-secure GUI-based
 - 💰 **Built-in Donation Page Access**: Support further development.
 - 🔁 **Auto-Reconnect**: Automatically tries to reconnect if the internet or server connection is lost.
 - 🔊 **Scientific and Space-Inspired Sound Effects**: Uses Sci-Fi-style audio cues for errors, events, and state changes.
+- 🔗 Port Forwarding Integrated!
 
 ---
 
